@@ -1,0 +1,34 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+db.sqlite3
+staticfiles/
+
+# Android / Gradle
+android_app/.gradle/
+android_app/build/
+android_app/app/build/
+android_app/local.properties
+android_app/.idea/
+*.iml
+*.jks
+*.keystore
+
+# OS / editor
+.DS_Store
+*.swp
+.vscode/
+.idea/
+
+# Secrets / cert copies (embedded app cert is intentionally tracked at res/raw/)
+*.pem
+!android_app/app/src/main/res/raw/server_cert.pem
+release-keystore.jks
+
+# Deploy artifacts
+wheels/
+backups/
+.env
+certs/
