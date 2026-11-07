@@ -1,0 +1,101 @@
+{% extends "admin/base_site.html" %}
+{% block extrahead %}{{ block.super }}
+<style>
+  :root {
+    --bg: #0e1014;
+    --bg-elev: #171a21;
+    --bg-elev-2: #1f232c;
+    --border: #2a2f3a;
+    --text: #e6e9ef;
+    --text-dim: #9aa3b2;
+    --accent: #4ade80;
+    --accent-dim: #2f9e5b;
+  }
+  body, #header, .dashboard, #content, .module, .module h2, .module caption,
+  table, th, td, .breadcrumbs, .breadcrumbs a, #content h1, #content h2,
+  #changelist table tbody td, #changelist table thead th, .sorted th,
+  .submit-row, .submit-row input, .button, input[type=submit], input[type=button],
+  .form-row, .form-row label, .aligned label, .form-row .help,
+  fieldset, fieldset h2, .collapse, .collapse h2,
+  #recent-actions-module, #recent-actions-module h2,
+  .object-tools a, .object-tools a:link, .object-tools a:visited,
+  .inline-group .tabular tr td, .inline-group h2,
+  .selector, .selector-available, .selector-chosen,
+  .selector .selector-available h2, .selector .selector-chosen h2,
+  select, input[type=text], input[type=password], input[type=email],
+  input[type=number], input[type=url], input[type=date], textarea,
+  .related-widget-wrapper select, .datetimeshortcuts, .url,
+  .table th, .table td, div.breadcrumbs, .module h2, .module caption,
+  #main-content, #content-main, #content-related, .colMS, .colM, .colS {
+    color-scheme: dark;
+  }
+  body { background: var(--bg) !important; color: var(--text) !important; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important; }
+  #header { background: var(--bg-elev) !important; border-bottom: 1px solid var(--border) !important; color: var(--text) !important; padding: 14px 22px !important; }
+  #header a:link, #header a:visited { color: var(--text) !important; }
+  #branding h1 { color: var(--text) !important; font-weight: 600 !important; }
+  #branding h1, #branding h2 { text-shadow: none !important; }
+  #user-tools a:link, #user-tools a:visited { color: var(--accent) !important; }
+  #user-tools { color: var(--text-dim) !important; }
+
+  .breadcrumbs, div.breadcrumbs { background: var(--bg-elev-2) !important; color: var(--text-dim) !important; border: 1px solid var(--border) !important; border-radius: 8px !important; }
+  .breadcrumbs a, div.breadcrumbs a:link, div.breadcrumbs a:visited { color: var(--accent) !important; }
+
+  .module, #content-related .module { background: var(--bg-elev) !important; border: 1px solid var(--border) !important; border-radius: 10px !important; overflow: hidden; }
+  .module h2, .module caption, #recent-actions-module h2 { background: var(--bg-elev-2) !important; color: var(--text) !important; border-bottom: 1px solid var(--border) !important; }
+  .module table th, table th, thead th, .sorted th { background: var(--bg-elev-2) !important; color: var(--text) !important; border-color: var(--border) !important; }
+  .module table td, table td, #changelist table tbody td { color: var(--text) !important; border-color: var(--border) !important; background: var(--bg-elev) !important; }
+  #changelist table tbody tr:hover td { background: var(--bg-elev-2) !important; }
+  table thead th a, table th a:link, table th a:visited { color: var(--text) !important; }
+
+  #content h1, #content h2, .dashboard #content h1 { color: var(--text) !important; }
+  .form-row, .form-row label, .aligned label, fieldset label { color: var(--text) !important; }
+  .form-row .help, .help, div.help { color: var(--text-dim) !important; }
+  fieldset { border: 1px solid var(--border) !important; border-radius: 10px !important; background: var(--bg-elev) !important; }
+  fieldset h2, .collapse h2 { background: var(--bg-elev-2) !important; color: var(--text) !important; border-bottom: 1px solid var(--border) !important; }
+
+  input[type=text], input[type=password], input[type=email], input[type=number],
+  input[type=url], input[type=date], select, textarea {
+    background: var(--bg-elev-2) !important; color: var(--text) !important;
+    border: 1px solid var(--border) !important; border-radius: 8px !important;
+    padding: 6px 10px !important;
+  }
+  input[type=text]:focus, input[type=password]:focus, input[type=email]:focus,
+  select:focus, textarea:focus { border-color: var(--accent-dim) !important; outline: none !important; }
+  select option { background: var(--bg-elev-2) !important; color: var(--text) !important; }
+
+  .submit-row, div.submit-row { background: var(--bg-elev) !important; border: 1px solid var(--border) !important; border-radius: 10px !important; }
+  .button, input[type=submit], input[type=button], .submit-row input {
+    background: var(--bg-elev-2) !important; color: var(--text) !important;
+    border: 1px solid var(--border) !important; border-radius: 8px !important;
+    padding: 7px 14px !important; cursor: pointer !important;
+  }
+  .button:hover, input[type=submit]:hover, .submit-row input:hover { border-color: var(--accent-dim) !important; }
+  .submit-row input.default, input.default { background: var(--accent-dim) !important; color: #fff !important; border-color: var(--accent-dim) !important; }
+  .submit-row input.default:hover { background: var(--accent) !important; }
+
+  .object-tools a, .object-tools a:link, .object-tools a:visited {
+    background: var(--bg-elev-2) !important; color: var(--text) !important;
+    border: 1px solid var(--border) !important; border-radius: 8px !important;
+  }
+  .object-tools a:hover { border-color: var(--accent-dim) !important; }
+  a:link, a:visited { color: var(--accent) !important; }
+  a:hover { color: #86efac !important; }
+
+  .selector, .selector-available, .selector-chosen {
+    background: var(--bg-elev) !important; border-color: var(--border) !important; color: var(--text) !important;
+  }
+  .selector .selector-available h2, .selector .selector-chosen h2 { background: var(--bg-elev-2) !important; color: var(--text) !important; }
+  .selector-filter input { background: var(--bg-elev-2) !important; color: var(--text) !important; }
+
+  .errornote, .errorlist li, ul.errorlist li { background: #3a1418 !important; color: #fecaca !important; border-color: #5b2026 !important; border-radius: 8px !important; }
+  ul.messagelist li { background: var(--bg-elev-2) !important; color: var(--text) !important; border-color: var(--border) !important; border-radius: 8px !important; }
+  ul.messagelist li.success { border-color: var(--accent-dim) !important; color: var(--accent) !important; }
+  ul.messagelist li.warning { border-color: #b97309 !important; color: #f59e0b !important; }
+  ul.messagelist li.error { border-color: #5b2026 !important; color: #fecaca !important; }
+
+  .colM, .colMS, #content-main, #content-related { color: var(--text) !important; }
+  .module a:link, .module a:visited { color: var(--accent) !important; }
+  .quiet, .small, .mini { color: var(--text-dim) !important; }
+  hr { border-color: var(--border) !important; }
+</style>
+{% endblock %}

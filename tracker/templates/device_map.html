@@ -1,0 +1,650 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Device Map — War Driving</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <style>
+    :root {
+      --bg: #0e1014; --bg-elev: #171a21; --bg-elev-2: #1f232c;
+      --border: #2a2f3a; --text: #e6e9ef; --text-dim: #9aa3b2;
+      --accent: #4ade80; --accent-dim: #2f9e5b;
+      --warn: #f59e0b; --danger: #ef4444;
+      --wifi: #4ade80; --cell: #ef4444; --ble: #3b82f6;
+      --radius: 10px;
+      --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; height: 100%; background: var(--bg); color: var(--text); font-family: var(--font); }
+    #app { display: flex; flex-direction: column; height: 100vh; }
+
+    header.topbar {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 14px 22px; background: var(--bg-elev); border-bottom: 1px solid var(--border);
+      flex: 0 0 auto;
+    }
+    header.topbar .brand { display: flex; align-items: center; gap: 12px; font-weight: 600; font-size: 16px; }
+    header.topbar .brand .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--ble); box-shadow: 0 0 10px var(--ble); }
+    header.topbar nav a { color: var(--text-dim); text-decoration: none; margin-left: 18px; font-size: 14px; transition: color .15s; }
+    header.topbar nav a:hover { color: var(--text); }
+    header.topbar .stats { display: flex; gap: 16px; font-size: 13px; color: var(--text-dim); }
+    header.topbar .stats span { display: flex; align-items: center; gap: 5px; }
+    header.topbar .stats .swatch { width: 8px; height: 8px; border-radius: 50%; }
+
+    body.has-sidebar main { display: flex; flex: 1 1 auto; min-height: 0; }
+    main { display: flex; flex: 1 1 auto; min-height: 0; }
+    #map { flex: 1 1 auto; min-width: 0; position: relative; background: #0b0d11; }
+
+    /* Sidebar */
+    #sidebar {
+      width: 340px; flex: 0 0 340px; background: var(--bg-elev);
+      border-right: 1px solid var(--border); overflow-y: auto;
+      display: none;
+    }
+    body.has-sidebar #sidebar { display: block; }
+
+    #sidebar .filters { padding: 16px; border-bottom: 1px solid var(--border); }
+    #sidebar .filters h3 { margin: 0 0 12px; font-size: 14px; font-weight: 600; color: var(--text); }
+    #sidebar .filters label { display: block; font-size: 12px; color: var(--text-dim); margin: 8px 0 4px; }
+    #sidebar .filters select, #sidebar .filters input {
+      width: 100%; padding: 8px 10px; background: var(--bg-elev-2); color: var(--text);
+      border: 1px solid var(--border); border-radius: 6px; font-family: var(--font); font-size: 13px;
+    }
+    #sidebar .filters .row { display: flex; gap: 8px; }
+    #sidebar .filters .row > * { flex: 1; }
+    #sidebar .filters button {
+      width: 100%; margin-top: 12px; padding: 9px; background: var(--accent-dim); color: #fff;
+      border: none; border-radius: 6px; font-family: var(--font); font-size: 13px; font-weight: 500; cursor: pointer;
+    }
+    #sidebar .filters button:hover { background: var(--accent); }
+    #sidebar .filters .toggle-sidebar {
+      background: var(--bg-elev-2); color: var(--text-dim); border: 1px solid var(--border); margin-top: 8px;
+    }
+
+    #sidebar .results { padding: 0; }
+    #sidebar .results .item {
+      padding: 12px 16px; border-bottom: 1px solid var(--border); cursor: pointer;
+      display: flex; align-items: start; gap: 10px;
+    }
+    #sidebar .results .item:hover { background: var(--bg-elev-2); }
+    #sidebar .results .item .icon {
+      width: 24px; height: 24px; border-radius: 50%; flex: 0 0 24px; margin-top: 2px;
+    }
+    #sidebar .results .item .info { flex: 1; min-width: 0; }
+    #sidebar .results .item .info .title { font-size: 13px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    #sidebar .results .item .info .sub { font-size: 11px; color: var(--text-dim); margin-top: 2px; }
+    #sidebar .results .count { padding: 12px 16px; font-size: 12px; color: var(--text-dim); border-bottom: 1px solid var(--border); }
+
+    /* Leaflet popup dark theme */
+    .leaflet-popup-content-wrapper { background: var(--bg-elev-2); color: var(--text); border-radius: var(--radius); box-shadow: 0 8px 30px rgba(0,0,0,.5); }
+    .leaflet-popup-tip { background: var(--bg-elev-2); }
+    .leaflet-popup-content { margin: 14px 16px; font-family: var(--font); }
+    .leaflet-popup-close-button { color: var(--text-dim) !important; top: 10px !important; right: 10px !important; }
+    .leaflet-popup-close-button:hover { color: var(--text) !important; }
+
+    .popup { min-width: 260px; }
+    .popup.age-fresh { border-left: 4px solid var(--accent); padding-left: 10px; }
+    .popup.age-stale { border-left: 4px solid var(--warn); padding-left: 10px; }
+    .popup.age-old { border-left: 4px solid var(--danger); padding-left: 10px; }
+    .popup .name { font-weight: 600; font-size: 15px; margin-bottom: 8px; }
+    .popup .row { display: flex; justify-content: space-between; gap: 14px; margin: 4px 0; font-size: 13px; }
+    .popup .row .k { color: var(--text-dim); }
+    .popup .row .v { color: var(--text); font-variant-numeric: tabular-nums; text-align: right; }
+    .popup .badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; }
+    .popup .badge.wifi { background: rgba(74,222,128,.15); color: var(--wifi); border: 1px solid var(--wifi); }
+    .popup .badge.cell { background: rgba(239,68,68,.15); color: var(--cell); border: 1px solid var(--cell); }
+    .popup .badge.bluetooth { background: rgba(59,130,246,.15); color: var(--ble); border: 1px solid var(--ble); }
+    .popup .badge.age-fresh { background: rgba(74,222,128,.15); color: var(--accent); }
+    .popup .badge.age-stale { background: rgba(245,158,11,.15); color: var(--warn); }
+    .popup .badge.age-old { background: rgba(239,68,68,.15); color: var(--danger); }
+    .popup .divider { height: 1px; background: var(--border); margin: 10px 0; }
+    .popup .prev-loc { cursor: pointer; padding: 3px 6px; border-radius: 4px; transition: background .15s; }
+    .popup .prev-loc:hover { background: var(--bg-elev); }
+    .popup .map-locations-btn {
+      width: 100%; padding: 8px 12px; cursor: pointer;
+      background: var(--bg-elev); color: var(--text); border: 1px solid var(--border);
+      border-radius: 8px; font-family: var(--font); font-size: 13px; font-weight: 500;
+      transition: background .15s, border-color .15s;
+    }
+    .popup .map-locations-btn:hover { background: var(--bg-elev-2); border-color: var(--accent-dim); }
+    .popup .cve-btn {
+      width: 100%; margin-top: 6px; padding: 8px 12px; cursor: pointer;
+      background: var(--bg-elev); color: var(--text); border: 1px solid var(--border);
+      border-radius: 8px; font-family: var(--font); font-size: 13px; font-weight: 500;
+      transition: background .15s, border-color .15s;
+    }
+    .popup .cve-btn:hover { background: var(--bg-elev-2); border-color: var(--danger); }
+    .popup .cve-list {
+      margin-top: 8px; max-height: 300px; overflow-y: auto; text-align: left;
+      font-size: 12px;
+    }
+    .popup .cve-item {
+      padding: 8px 0; border-bottom: 1px solid var(--border);
+    }
+    .popup .cve-item:last-child { border-bottom: none; }
+    .popup .cve-item .cve-id { font-weight: 600; color: var(--text); }
+    .popup .cve-item .cve-id a { color: var(--accent); text-decoration: none; }
+    .popup .cve-item .cve-id a:hover { text-decoration: underline; }
+    .popup .cve-item .cve-cvss {
+      display: inline-block; margin-left: 8px; padding: 1px 6px; border-radius: 4px;
+      font-size: 10px; font-weight: 600;
+    }
+    .popup .cve-item .cve-cvss.critical { background: rgba(239,68,68,.2); color: var(--danger); }
+    .popup .cve-item .cve-cvss.high { background: rgba(245,158,11,.2); color: var(--warn); }
+    .popup .cve-item .cve-cvss.medium { background: rgba(74,222,128,.15); color: var(--accent); }
+    .popup .cve-item .cve-cvss.low { background: rgba(154,163,178,.15); color: var(--text-dim); }
+    .popup .cve-item .cve-summary {
+      color: var(--text-dim); margin-top: 4px; line-height: 1.4;
+      display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
+    }
+    .popup .cve-loading { color: var(--text-dim); font-size: 12px; padding: 8px 0; text-align: center; }
+    #showAllBtn {
+      display: none; position: absolute; top: 10px; left: 50%; transform: translateX(-50%);
+      z-index: 1000; padding: 8px 16px; cursor: pointer;
+      background: var(--bg-elev); color: var(--text); border: 1px solid var(--border);
+      border-radius: 8px; font-family: var(--font); font-size: 13px; font-weight: 500;
+      box-shadow: 0 4px 12px rgba(0,0,0,.4);
+    }
+    #showAllBtn:hover { background: var(--bg-elev-2); border-color: var(--accent-dim); }
+
+    .leaflet-control-zoom a { background: var(--bg-elev-2) !important; color: var(--text) !important; border-color: var(--border) !important; }
+    .leaflet-control-attribution { background: rgba(14,16,20,.8) !important; color: var(--text-dim) !important; }
+
+    /* Spiderfy effect for overlapping markers */
+    .spiderfy-leg { stroke: var(--text-dim); stroke-width: 1.5; opacity: 0.5; fill: none; }
+    .spiderfy-marker { cursor: pointer; transition: r 0.2s; }
+    .spiderfy-marker:hover { r: 8; }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <header class="topbar">
+      <div class="brand"><span class="dot"></span> Device Map</div>
+      <div class="stats">
+        <span><span class="swatch" style="background:var(--wifi)"></span> WiFi {{ wifi_count }}</span>
+        <span><span class="swatch" style="background:var(--cell)"></span> Cell {{ cell_count }}</span>
+        <span><span class="swatch" style="background:var(--ble)"></span> BLE {{ ble_count }}</span>
+        <span style="color:var(--text-dim)">Total: {{ total_count }}</span>
+      </div>
+      <nav>
+        <a href="#" id="toggleFilters">Filters</a>
+        <a href="/map/">Client Map</a>
+        <a href="/admin/">Admin</a>
+      </nav>
+    </header>
+    <main>
+      <div id="sidebar">
+        <div class="filters">
+          <h3>Filter Devices</h3>
+          <label for="f_type">Device type</label>
+          <select id="f_type">
+            <option value="">All</option>
+            <option value="wifi">WiFi</option>
+            <option value="cell">Cell Tower</option>
+            <option value="bluetooth">Bluetooth</option>
+          </select>
+
+          <label for="f_mac">MAC / BSSID prefix</label>
+          <input type="text" id="f_mac" placeholder="e.g. AA:BB:CC or AABBC" />
+
+          <label for="f_client">Client device</label>
+          <select id="f_client">
+            <option value="">All clients</option>
+          </select>
+
+          <div class="row">
+            <div>
+              <label for="f_from">Date from</label>
+              <input type="datetime-local" id="f_from" />
+            </div>
+            <div>
+              <label for="f_to">Date to</label>
+              <input type="datetime-local" id="f_to" />
+            </div>
+          </div>
+
+          <button id="btnSearch">Search</button>
+          <button class="toggle-sidebar" id="btnCloseSidebar">Close sidebar</button>
+        </div>
+        <div class="results">
+          <div class="count" id="resultCount">{{ total_count }} devices</div>
+          <div id="resultList"></div>
+        </div>
+      </div>
+      <div id="map"></div>
+      <button id="showAllBtn">← Show All Devices</button>
+    </main>
+  </div>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+    const allDevices = {{ devices_json|safe }};
+    const clientDevices = {{ client_devices_json|safe }};
+    const csrftoken = "{{ csrf_token }}";
+
+    const map = L.map('map', { zoomControl: true }).setView([20, 0], 2);
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+      maxZoom: 19, subdomains: 'abcd',
+      attribution: '&copy; OpenStreetMap &copy; CARTO'
+    }).addTo(map);
+
+    // Sidebar is part of the layout from the start so the map container
+    // is measured correctly by Leaflet at init time.
+    document.body.classList.add('has-sidebar');
+    // Re-measure now that the layout has settled.
+    requestAnimationFrame(() => map.invalidateSize());
+
+    // Populate client device dropdown
+    const f_client = document.getElementById('f_client');
+    clientDevices.forEach(d => {
+      const opt = document.createElement('option');
+      opt.value = d.device_id; opt.textContent = d.name;
+      f_client.appendChild(opt);
+    });
+
+    const typeColors = { wifi: '#4ade80', cell: '#ef4444', bluetooth: '#3b82f6' };
+    const ageColors = { fresh: '#4ade80', stale: '#f59e0b', old: '#ef4444' };
+
+    function fmtTime(ts) {
+      if (!ts) return '—';
+      const d = new Date(ts);
+      const diff = (Date.now() - d.getTime()) / 1000;
+      if (diff < 3600) return `${Math.floor(diff/60)}m ago`;
+      if (diff < 86400) return `${Math.floor(diff/3600)}h ago`;
+      if (diff < 604800) return `${Math.floor(diff/86400)}d ago`;
+      return d.toLocaleDateString();
+    }
+
+    function buildPopup(d) {
+      const typeLabel = { wifi: 'WiFi', cell: 'Cell Tower', bluetooth: 'Bluetooth' }[d.type] || d.type;
+      let html = `<div class="popup age-${d.age}">`;
+      html += `<div class="name">${d.name || d.mac || 'Unknown'}</div>`;
+      html += `<div class="row"><span class="k">Type</span><span class="v"><span class="badge ${d.type}">${typeLabel}</span></span></div>`;
+      html += `<div class="row"><span class="k">MAC/BSSID</span><span class="v">${d.mac || '—'}</span></div>`;
+      if (d.manufacturer) html += `<div class="row"><span class="k">Manufacturer</span><span class="v">${d.manufacturer}</span></div>`;
+      if (d.vendor) html += `<div class="row"><span class="k">Vendor</span><span class="v">${d.vendor}</span></div>`;
+      if (d.model) html += `<div class="row"><span class="k">Model</span><span class="v">${d.model}</span></div>`;
+      if (d.encryption) html += `<div class="row"><span class="k">Encryption</span><span class="v">${d.encryption}</span></div>`;
+      if (d.frequency_band) html += `<div class="row"><span class="k">Band</span><span class="v">${d.frequency_band}</span></div>`;
+      if (d.signal_dbm != null) html += `<div class="row"><span class="k">Signal</span><span class="v">${d.signal_dbm} dBm</span></div>`;
+      if (d.radio) html += `<div class="row"><span class="k">Radio</span><span class="v">${d.radio}</span></div>`;
+      if (d.mcc) html += `<div class="row"><span class="k">MCC/MNC</span><span class="v">${d.mcc}/${d.mnc}</span></div>`;
+      if (d.cell_id != null) html += `<div class="row"><span class="k">Cell ID</span><span class="v">${d.cell_id}</span></div>`;
+      if (d.tac != null) html += `<div class="row"><span class="k">TAC</span><span class="v">${d.tac}</span></div>`;
+      if (d.pci != null) html += `<div class="row"><span class="k">PCI</span><span class="v">${d.pci}</span></div>`;
+      if (d.rsrp != null) html += `<div class="row"><span class="k">RSRP</span><span class="v">${d.rsrp}</span></div>`;
+      if (d.rsrq != null) html += `<div class="row"><span class="k">RSRQ</span><span class="v">${d.rsrq}</span></div>`;
+      if (d.snr != null) html += `<div class="row"><span class="k">SNR</span><span class="v">${d.snr}</span></div>`;
+      if (d.rssi != null) html += `<div class="row"><span class="k">RSSI</span><span class="v">${d.rssi} dBm</span></div>`;
+      if (d.tx_power != null) html += `<div class="row"><span class="k">TX Power</span><span class="v">${d.tx_power}</span></div>`;
+      html += `<div class="row"><span class="k">Position</span><span class="v">${d.lat.toFixed(5)}, ${d.lng.toFixed(5)}</span></div>`;
+      html += `<div class="row"><span class="k">First seen</span><span class="v">${fmtTime(d.first_seen)}</span></div>`;
+      html += `<div class="row"><span class="k">Last seen</span><span class="v">${fmtTime(d.last_seen)}</span></div>`;
+      html += `<div class="row"><span class="k">Sightings</span><span class="v">${d.sighting_count}</span></div>`;
+      html += `<div class="row"><span class="k">Age</span><span class="v"><span class="badge age-${d.age}">${d.age}</span></span></div>`;
+
+      // Previous locations
+      if (d.previous_locations && d.previous_locations.length > 0) {
+        html += `<div class="divider"></div>`;
+        html += `<div class="row"><span class="k" style="font-weight:600">Previous Locations (${d.previous_locations.length})</span></div>`;
+        d.previous_locations.forEach(loc => {
+          html += `<div class="row prev-loc" data-lat="${loc.lat}" data-lng="${loc.lng}">`;
+          html += `<span class="k">📍 ${loc.lat.toFixed(5)}, ${loc.lng.toFixed(5)}</span>`;
+          html += `<span class="v">${fmtTime(loc.last_seen)} (${loc.sighting_count}x)</span>`;
+          html += `</div>`;
+        });
+      }
+
+      html += `<div class="divider"></div>`;
+      html += `<button class="map-locations-btn" data-device-id="${d.id}">Map Locations</button>`;
+      if (d.manufacturer || d.vendor) {
+        const mfgr = d.manufacturer || d.vendor;
+        html += `<button class="cve-btn" data-manufacturer="${mfgr.replace(/"/g, '&quot;')}">List CVEs</button>`;
+      }
+      html += `</div>`;
+      return html;
+    }
+
+    let markers = [];
+    let routeLayer = null;  // polyline for single-device route view
+    let spiderfyActive = null;  // {originalMarkers, spreadMarkers, legs, centerLatLng}
+
+    function clearMap() {
+      unspiderfy();
+      markers.forEach(m => map.removeLayer(m));
+      markers = [];
+      if (routeLayer) { map.removeLayer(routeLayer); routeLayer = null; }
+    }
+
+    function unspiderfy() {
+      if (!spiderfyActive) return;
+      spiderfyActive.legs.forEach(l => map.removeLayer(l));
+      spiderfyActive.spreadMarkers.forEach(m => map.removeLayer(m));
+      // Restore original markers' visibility
+      spiderfyActive.originalMarkers.forEach(m => { if (map.hasLayer(m)) map.removeLayer(m); m.addTo(map); });
+      spiderfyActive = null;
+    }
+
+    function spiderfy(groupMarkers, centerLatLng) {
+      unspiderfy();
+      if (groupMarkers.length <= 1) return;
+
+      const n = groupMarkers.length;
+      const spiralRadius = Math.min(80, 15 + n * 6);
+      const legs = [];
+      const spreadMarkers = [];
+
+      // Hide originals
+      groupMarkers.forEach(m => map.removeLayer(m));
+
+      for (let i = 0; i < n; i++) {
+        const angle = (2 * Math.PI * i) / Math.max(n, 6);
+        const r = spiralRadius * (1 + 0.3 * (i / Math.max(n - 1, 1)));
+        const center = map.latLngToLayerPoint(centerLatLng);
+        const offset = L.point(r * Math.cos(angle), r * Math.sin(angle));
+        const dest = map.layerPointToLatLng(center.add(offset));
+
+        // Draw leg line
+        const leg = L.polyline([centerLatLng, dest], {
+          color: '#9aa3b2', weight: 1.5, opacity: 0.4, interactive: false
+        }).addTo(map);
+        legs.push(leg);
+
+        // Create spread marker — clone the original marker's style
+        const orig = groupMarkers[i];
+        const opts = orig.options;
+        const sm = L.circleMarker(dest, {
+          color: opts.color, fillColor: opts.fillColor, fillOpacity: opts.fillOpacity,
+          radius: opts.radius + 2, weight: opts.weight, interactive: true
+        }).addTo(map);
+
+        // Copy popup and events from original
+        if (orig.getPopup()) sm.bindPopup(orig.getPopup().getContent(), { minWidth: 280 });
+        sm.on('popupopen', () => {
+          document.querySelectorAll('.popup .prev-loc').forEach(el => {
+            el.onclick = () => {
+              const lat = parseFloat(el.dataset.lat);
+              const lng = parseFloat(el.dataset.lng);
+              map.setView([lat, lng], 18);
+            };
+          });
+          document.querySelectorAll('.popup .map-locations-btn').forEach(btn => {
+            btn.onclick = () => {
+              const deviceId = parseInt(btn.dataset.deviceId);
+              const device = allDevices.find(d => d.id === deviceId);
+              if (device) showDeviceRoute(device);
+            };
+          });
+          document.querySelectorAll('.popup .cve-btn').forEach(btn => {
+            btn.onclick = () => {
+              const manufacturer = btn.dataset.manufacturer;
+              const popup = btn.closest('.popup');
+              let cveDiv = popup.querySelector('.cve-list');
+              if (cveDiv) { cveDiv.remove(); return; }
+              cveDiv = document.createElement('div');
+              cveDiv.className = 'cve-list';
+              cveDiv.innerHTML = '<div class="cve-loading">Loading CVEs...</div>';
+              btn.after(cveDiv);
+              fetch(`/api/cves/?manufacturer=${encodeURIComponent(manufacturer)}`)
+                .then(r => r.json())
+                .then(data => {
+                  if (data.error) { cveDiv.innerHTML = `<div class="cve-loading">${data.error}</div>`; return; }
+                  if (!data.cves || data.cves.length === 0) {
+                    cveDiv.innerHTML = `<div class="cve-loading">${data.message || 'No CVEs found'} (${data.vendor})</div>`;
+                    return;
+                  }
+                  let html = `<div class="cve-loading">${data.cve_count} CVEs for ${data.vendor} (showing top ${data.cves.length})</div>`;
+                  data.cves.forEach(cve => {
+                    const cvss = cve.cvss || 0;
+                    const severity = cvss >= 9 ? 'critical' : cvss >= 7 ? 'high' : cvss >= 4 ? 'medium' : 'low';
+                    const summary = cve.summary || '';
+                    html += `<div class="cve-item">
+                      <span class="cve-id"><a href="https://nvd.nist.gov/vuln/detail/${cve.id}" target="_blank">${cve.id}</a></span>
+                      <span class="cve-cvss ${severity}">${cvss > 0 ? cvss.toFixed(1) : 'N/A'}</span>
+                      <div class="cve-summary">${summary}</div>
+                    </div>`;
+                  });
+                  cveDiv.innerHTML = html;
+                })
+                .catch(err => {
+                  cveDiv.innerHTML = `<div class="cve-loading">Error: ${err.message}</div>`;
+                });
+            };
+          });
+        });
+
+        spreadMarkers.push(sm);
+      }
+
+      spiderfyActive = { originalMarkers: groupMarkers, spreadMarkers, legs, centerLatLng };
+    }
+
+    function setupSpiderfy() {
+      // On mousemove, check if we're hovering over a cluster of overlapping markers
+      map.on('mousemove', (e) => {
+        if (spiderfyActive) return;  // already spiderfied
+        const threshold = 12;  // pixels
+        const nearby = [];
+        const center = e.containerPoint;
+
+        markers.forEach(m => {
+          if (!map.hasLayer(m)) return;
+          const mp = map.latLngToContainerPoint(m.getLatLng());
+          const dx = mp.x - center.x;
+          const dy = mp.y - center.y;
+          if (Math.sqrt(dx*dx + dy*dy) < threshold) {
+            nearby.push(m);
+          }
+        });
+
+        if (nearby.length > 1) {
+          // Find the center of the cluster
+          const avgLat = nearby.reduce((s, m) => s + m.getLatLng().lat, 0) / nearby.length;
+          const avgLng = nearby.reduce((s, m) => s + m.getLatLng().lng, 0) / nearby.length;
+          spiderfy(nearby, L.latLng(avgLat, avgLng));
+        }
+      });
+
+      // Unspiderfy on mouseout from the map container
+      map.getContainer().addEventListener('mouseleave', unspiderfy);
+
+      // Unspiderfy when clicking elsewhere
+      map.on('click', unspiderfy);
+
+      // Re-spiderfy on zoom (positions change)
+      map.on('zoomstart', unspiderfy);
+    }
+
+    function showDeviceRoute(device) {
+      clearMap();
+      const points = [];
+      const bounds = [];
+
+      // Collect all locations (previous + current), sorted by first_seen
+      const allLocs = [];
+      if (device.previous_locations) {
+        device.previous_locations.forEach(loc => {
+          allLocs.push({ lat: loc.lat, lng: loc.lng, first_seen: loc.first_seen, last_seen: loc.last_seen, sighting_count: loc.sighting_count, is_current: false });
+        });
+      }
+      allLocs.push({ lat: device.lat, lng: device.lng, first_seen: device.first_seen, last_seen: device.last_seen, sighting_count: device.sighting_count, is_current: true });
+      allLocs.sort((a, b) => new Date(a.first_seen) - new Date(b.first_seen));
+
+      // Plot each location as a numbered marker
+      const color = typeColors[device.type] || '#888';
+      allLocs.forEach((loc, idx) => {
+        const ageColor = loc.is_current ? '#ffffff' : (ageColors[_ageFromTs(loc.last_seen)] || '#888');
+        const marker = L.circleMarker([loc.lat, loc.lng], {
+          color: ageColor, fillColor: color, fillOpacity: 0.9, radius: loc.is_current ? 10 : 7, weight: loc.is_current ? 3 : 2,
+        }).addTo(map);
+        markers.push(marker);
+
+        const popupHtml = `<div class="popup age-${_ageFromTs(loc.last_seen)}">
+          <div class="name">${device.name || device.mac || 'Unknown'} ${loc.is_current ? '(current)' : '#' + (idx + 1)}</div>
+          <div class="row"><span class="k">Position</span><span class="v">${loc.lat.toFixed(5)}, ${loc.lng.toFixed(5)}</span></div>
+          <div class="row"><span class="k">First seen</span><span class="v">${fmtTime(loc.first_seen)}</span></div>
+          <div class="row"><span class="k">Last seen</span><span class="v">${fmtTime(loc.last_seen)}</span></div>
+          <div class="row"><span class="k">Sightings</span><span class="v">${loc.sighting_count}</span></div>
+        </div>`;
+        marker.bindPopup(popupHtml, { minWidth: 240 });
+        points.push([loc.lat, loc.lng]);
+        bounds.push([loc.lat, loc.lng]);
+      });
+
+      // Draw connecting polyline (route over time)
+      if (points.length > 1) {
+        routeLayer = L.polyline(points, {
+          color: '#3b82f6', weight: 2, opacity: 0.7, dashArray: '6, 8',
+        }).addTo(map);
+      }
+
+      // Fit bounds
+      if (bounds.length === 1) map.setView(bounds[0], 15);
+      else if (bounds.length > 1) map.fitBounds(bounds, { padding: [60, 60] });
+
+      document.getElementById('showAllBtn').style.display = 'block';
+    }
+
+    function _ageFromTs(ts) {
+      if (!ts) return 'old';
+      const diff = (Date.now() - new Date(ts).getTime()) / 1000;
+      if (diff < 7 * 86400) return 'fresh';
+      if (diff < 30 * 86400) return 'stale';
+      return 'old';
+    }
+
+    function renderDevices(devices) {
+      clearMap();
+      const bounds = [];
+
+      devices.forEach(d => {
+        if (d.lat == null || d.lng == null) return;
+        const color = typeColors[d.type] || '#888';
+        const ageColor = ageColors[d.age] || '#888';
+        const marker = L.circleMarker([d.lat, d.lng], {
+          color: ageColor, fillColor: color, fillOpacity: 0.8, radius: 7, weight: 2,
+        }).addTo(map);
+        marker.bindPopup(buildPopup(d), { minWidth: 280 });
+        marker.on('popupopen', () => {
+          document.querySelectorAll('.popup .prev-loc').forEach(el => {
+            el.onclick = () => {
+              const lat = parseFloat(el.dataset.lat);
+              const lng = parseFloat(el.dataset.lng);
+              map.setView([lat, lng], 18);
+            };
+          });
+          document.querySelectorAll('.popup .map-locations-btn').forEach(btn => {
+            btn.onclick = () => {
+              const deviceId = parseInt(btn.dataset.deviceId);
+              const device = allDevices.find(d => d.id === deviceId);
+              if (device) showDeviceRoute(device);
+            };
+          });
+          document.querySelectorAll('.popup .cve-btn').forEach(btn => {
+            btn.onclick = () => {
+              const manufacturer = btn.dataset.manufacturer;
+              const popup = btn.closest('.popup');
+              let cveDiv = popup.querySelector('.cve-list');
+              if (cveDiv) { cveDiv.remove(); return; }
+              cveDiv = document.createElement('div');
+              cveDiv.className = 'cve-list';
+              cveDiv.innerHTML = '<div class="cve-loading">Loading CVEs...</div>';
+              btn.after(cveDiv);
+              fetch(`/api/cves/?manufacturer=${encodeURIComponent(manufacturer)}`)
+                .then(r => r.json())
+                .then(data => {
+                  if (data.error) {
+                    cveDiv.innerHTML = `<div class="cve-loading">${data.error}</div>`;
+                    return;
+                  }
+                  if (!data.cves || data.cves.length === 0) {
+                    cveDiv.innerHTML = `<div class="cve-loading">${data.message || 'No CVEs found'} (${data.vendor})</div>`;
+                    return;
+                  }
+                  let html = `<div class="cve-loading">${data.cve_count} CVEs for ${data.vendor} (showing top ${data.cves.length})</div>`;
+                  data.cves.forEach(cve => {
+                    const cvss = cve.cvss || 0;
+                    const severity = cvss >= 9 ? 'critical' : cvss >= 7 ? 'high' : cvss >= 4 ? 'medium' : 'low';
+                    const summary = cve.summary || '';
+                    html += `<div class="cve-item">
+                      <span class="cve-id"><a href="https://nvd.nist.gov/vuln/detail/${cve.id}" target="_blank">${cve.id}</a></span>
+                      <span class="cve-cvss ${severity}">${cvss > 0 ? cvss.toFixed(1) : 'N/A'}</span>
+                      <div class="cve-summary">${summary}</div>
+                    </div>`;
+                  });
+                  cveDiv.innerHTML = html;
+                })
+                .catch(err => {
+                  cveDiv.innerHTML = `<div class="cve-loading">Error: ${err.message} (are you logged in as staff?)</div>`;
+                });
+            };
+          });
+        });
+        markers.push(marker);
+        bounds.push([d.lat, d.lng]);
+      });
+
+      if (bounds.length === 1) map.setView(bounds[0], 15);
+      else if (bounds.length > 1) map.fitBounds(bounds, { padding: [60, 60] });
+
+      // Update results list
+      const list = document.getElementById('resultList');
+      list.innerHTML = '';
+      devices.slice(0, 200).forEach(d => {
+        const item = document.createElement('div');
+        item.className = 'item';
+        const color = typeColors[d.type] || '#888';
+        item.innerHTML = `
+          <div class="icon" style="background:${color}"></div>
+          <div class="info">
+            <div class="title">${d.name || d.mac || 'Unknown'}${d.manufacturer ? ' <span style="color:var(--text-dim);font-weight:400">— ' + d.manufacturer + '</span>' : ''}</div>
+            <div class="sub">${d.type.toUpperCase()} · ${d.mac || ''} · ${fmtTime(d.last_seen)} · ${d.sighting_count}x seen</div>
+          </div>`;
+        item.onclick = () => { map.setView([d.lat, d.lng], 18); markers.find(m => m === markers[devices.indexOf(d)])?.openPopup(); };
+        list.appendChild(item);
+      });
+      document.getElementById('resultCount').textContent = `${devices.length} devices`;
+    }
+
+    // Initial render
+    renderDevices(allDevices);
+    setupSpiderfy();
+    requestAnimationFrame(() => map.invalidateSize());
+
+    // Filter search
+    document.getElementById('btnSearch').onclick = () => {
+      const params = new URLSearchParams({
+        type: document.getElementById('f_type').value,
+        mac_prefix: document.getElementById('f_mac').value,
+        client_device: document.getElementById('f_client').value,
+        date_from: document.getElementById('f_from').value,
+        date_to: document.getElementById('f_to').value,
+      });
+      fetch(`/api/device-search/?${params}`)
+        .then(r => r.json())
+        .then(data => {
+          renderDevices(data.results);
+          document.getElementById('resultCount').textContent = `${data.count} devices`;
+        })
+        .catch(err => alert('Search failed: ' + err));
+    };
+
+    // Sidebar toggle
+    document.getElementById('toggleFilters').onclick = (e) => {
+      e.preventDefault();
+      document.body.classList.toggle('has-sidebar');
+      map.invalidateSize();
+    };
+    document.getElementById('btnCloseSidebar').onclick = () => {
+      document.body.classList.remove('has-sidebar');
+      map.invalidateSize();
+    };
+
+    // Show All button — return to full device map
+    document.getElementById('showAllBtn').onclick = () => {
+      document.getElementById('showAllBtn').style.display = 'none';
+      renderDevices(allDevices);
+    };
+  </script>
+</body>
+</html>

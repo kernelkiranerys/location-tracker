@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Register Device — Location Tracker</title>
+  <style>
+    :root {
+      --bg: #0e1014; --bg-elev: #171a21; --bg-elev-2: #1f232c;
+      --border: #2a2f3a; --text: #e6e9ef; --text-dim: #9aa3b2;
+      --accent: #4ade80; --accent-dim: #2f9e5b; --radius: 10px;
+      --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; padding: 0; background: var(--bg); color: var(--text); font-family: var(--font); min-height: 100vh; display: flex; flex-direction: column; align-items: center; }
+    header { width: 100%; padding: 14px 22px; background: var(--bg-elev); border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
+    header .brand { display: flex; align-items: center; gap: 10px; font-weight: 600; }
+    header .brand .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 10px var(--accent); }
+    header nav a { color: var(--text-dim); text-decoration: none; margin-left: 18px; font-size: 14px; }
+    header nav a:hover { color: var(--text); }
+
+    main { max-width: 560px; width: 100%; padding: 32px 22px; flex: 1; }
+
+    h1 { font-size: 22px; font-weight: 600; margin: 0 0 6px; }
+    p.lead { color: var(--text-dim); font-size: 14px; margin: 0 0 28px; line-height: 1.5; }
+
+    .card { background: var(--bg-elev); border: 1px solid var(--border); border-radius: var(--radius); padding: 24px; margin-bottom: 20px; }
+    .card h2 { font-size: 15px; font-weight: 600; margin: 0 0 16px; }
+
+    form .field { margin-bottom: 16px; }
+    form label { display: block; font-size: 13px; color: var(--text-dim); margin-bottom: 6px; }
+    form input[type=text] { width: 100%; background: var(--bg-elev-2); color: var(--text); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; font-family: var(--font); font-size: 14px; }
+    form input[type=text]:focus { outline: none; border-color: var(--accent-dim); }
+    form button, .btn { display: inline-block; background: var(--bg-elev-2); color: var(--text); border: 1px solid var(--border); border-radius: 8px; padding: 10px 18px; font-family: var(--font); font-size: 14px; font-weight: 500; cursor: pointer; text-decoration: none; transition: border-color .15s; }
+    form button:hover, .btn:hover { border-color: var(--accent-dim); }
+    form button.primary { background: var(--accent-dim); color: #fff; border-color: var(--accent-dim); }
+    form button.primary:hover { background: var(--accent); }
+
+    .qr-section { text-align: center; }
+    .qr-section #qr-canvas { display: inline-block; border-radius: var(--radius); background: #fff; padding: 16px; margin: 12px 0; }
+    .qr-section #qr-canvas img, .qr-section #qr-canvas canvas { display: block; }
+    .qr-section .payload-box { background: var(--bg-elev-2); border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; margin-top: 14px; text-align: left; }
+    .qr-section .payload-box summary { cursor: pointer; color: var(--text-dim); font-size: 13px; user-select: none; }
+    .qr-section .payload-box summary:hover { color: var(--text); }
+    .qr-section .payload-box pre { margin: 10px 0 0; font-size: 11px; color: var(--text-dim); white-space: pre-wrap; word-break: break-all; }
+
+    .field-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .field-grid .item { background: var(--bg-elev-2); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; }
+    .field-grid .item .k { font-size: 11px; color: var(--text-dim); margin-bottom: 4px; }
+    .field-grid .item .v { font-size: 13px; color: var(--text); font-family: monospace; word-break: break-all; }
+
+    .actions { display: flex; gap: 10px; margin-top: 18px; }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="brand"><span class="dot"></span> Location Tracker</div>
+    <nav>
+      <a href="/map/">Map</a>
+      <a href="/admin/">Admin</a>
+    </nav>
+  </header>
+  <main>
+    <h1>Register Device</h1>
+    <p class="lead">Generate credentials for a new device, then scan the QR code with the Android app's "Scan QR" button.</p>
+
+    <div class="card">
+      <form method="post">
+        {% csrf_token %}
+        <div class="field">
+          <label for="id_name">Device name</label>
+          <input type="text" id="id_name" name="name" placeholder="e.g. Pixel 8 Pro" required maxlength="100" />
+        </div>
+        <button type="submit" class="primary">Add new device</button>
+      </form>
+    </div>
+
+    {% if created_device %}
+    <div class="card qr-section">
+      <h2>{{ created_device.name }}</h2>
+      <p class="lead" style="margin:0 0 8px">Scan this QR code in the Android app's Settings screen.</p>
+      <div id="qr-canvas"></div>
+      <div class="field-grid">
+        <div class="item"><div class="k">Device ID</div><div class="v">{{ created_device.device_id }}</div></div>
+        <div class="item"><div class="k">Secret Key</div><div class="v">{{ created_device.secret_key }}</div></div>
+        <div class="item"><div class="k">Server</div><div class="v">{{ qr_host }}:{{ qr_port }}</div></div>
+        <div class="item"><div class="k">Created</div><div class="v">{{ created_device.created_at|date:"Y-m-d H:i" }}</div></div>
+      </div>
+      <details class="payload-box">
+        <summary>Show raw QR payload (JSON)</summary>
+        <pre id="qr-payload">{{ qr_payload }}</pre>
+      </details>
+      <div class="actions">
+        <a href="/register/" class="btn">Add another</a>
+      </div>
+    </div>
+    {% endif %}
+  </main>
+
+  {% if qr_payload %}
+  <script src="https://cdn.jsdelivr.net/gh/davidshimjs/qrcodejs/qrcode.min.js"></script>
+  <script>
+    const payload = {{ qr_payload|safe }};
+    new QRCode(document.getElementById('qr-canvas'), {
+      text: JSON.stringify(payload),
+      width: 280,
+      height: 280,
+      colorDark: "#0e1014",
+      colorLight: "#ffffff",
+      correctLevel: QRCode.CorrectLevel.M
+    });
+  </script>
+  {% endif %}
+</body>
+</html>
