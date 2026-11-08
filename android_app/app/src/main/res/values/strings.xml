@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">Location Tracker</string>
+    <string name="privacy_mode_active">Privacy mode active until %1$s — admin can override.</string>
+</resources>
